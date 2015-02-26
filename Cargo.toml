@@ -1,0 +1,4 @@
+[package]
+name = "r4"
+version = "1.0.0-b1"
+authors = [ "Stu Black <trurl@freeshell.org>" ]
