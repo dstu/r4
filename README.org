@@ -61,7 +61,6 @@ is expanded like so:
 extern crate r4;
 
 let items = {
-  use ::r4::FlatIter;
   (0..10).flat_map(move |x| {
     let y = x + 1;
     ::r4::FlatIter::new(if y % 2 == 0 {
