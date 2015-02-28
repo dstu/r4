@@ -1,53 +1,31 @@
+#![feature(test)]
 use std::iter::Iterator;
 
-// Flattening iterator, which concatenates iterators provided by the wrapped
-// iterator.
-pub struct FlatIter<I: Iterator> where <I as Iterator>::Item: Iterator {
-    wrapped: I,
-    current_iterator: Option<<I as Iterator>::Item>,
+// Flat-maps an Option<I> where I: Iterator into any underlying Iterator.
+pub struct FlatIter<I: Iterator> {
+    wrapped: Option<I>,
 }
 
-impl<I: Iterator> FlatIter<I> where <I as Iterator>::Item: Iterator {
-    pub fn new(wrapped: I) -> Self {
-        FlatIter { wrapped: wrapped, current_iterator: None, }
-    }
-
-    // Pull in the next iterator from the wrapped iterator and return false iff
-    // the wrapped iterator is exhausted.
-    fn advance_wrapped(&mut self) -> bool {
-        self.current_iterator = self.wrapped.next();
-        self.current_iterator.is_some()
+impl<I: Iterator> FlatIter<I> {
+    pub fn new(wrapped: Option<I>) -> Self {
+        FlatIter { wrapped: wrapped, }
     }
 }
 
-impl<I: Iterator> Iterator for FlatIter<I> where <I as Iterator>::Item: Iterator {
-    type Item = <<I as Iterator>::Item as Iterator>::Item;
+impl<I: Iterator> Iterator for FlatIter<I> {
+    type Item = <I as Iterator>::Item;
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
-        loop {
-            if let Some(ref mut i) = self.current_iterator {
-                let next = i.next();
-                if next.is_some() {
-                    return next;
-                }
-            }
-            // Fall-through: current_iterator is empty.
-            if !self.advance_wrapped() {
-                return None;
-            }
+        match self.wrapped {
+            Some(ref mut i) => i.next(),
+            None => None,
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        match self.current_iterator {
-            Some(ref i) => {
-                match i.size_hint() {
-                    (min, None) => (min, None),
-                    (_, Some(max)) => (max, None),
-                }
-            },
-            // Either we're exhausted, or iteration hasn't yet begun.
-            None => (0usize, None),
+        match self.wrapped {
+            Some(ref i) => i.size_hint(),
+            None => (0usize, Some(0usize)),
         }
     }
 }
@@ -60,13 +38,8 @@ impl<I: Iterator> Iterator for FlatIter<I> where <I as Iterator>::Item: Iterator
 // Expressions are compiled into nested flat_map operations via closures that
 // move out of the enclosing environment. See package-level documentation for
 // details.
+#[macro_export]
 macro_rules! iterate {
-    ($($rest:tt)*) => ({ use ::r4::FlatIter; iterate_helper![$($rest)*] });
-}
-
-// Helper macro which iterate! delegates to. Do not call this directly unless
-// you have good reason to.
-macro_rules! iterate_helper {
     // Implementation note: adjacent wildcard matches aren't allowed, so each
     // recursive rule has three cases, wherein the wildcards matches are
     // separated by macro keywords.
@@ -75,26 +48,205 @@ macro_rules! iterate_helper {
     (yield $r:expr) => (Some($r).into_iter());
     // for
     (for $x:ident in $xs:expr; $($rest:tt)*) =>
-        ($xs.flat_map(move |$x| { iterate_helper![$($rest)*] }));
+        ($xs.flat_map(move |$x| { iterate![$($rest)*] }));
     // if if => if
     (if $a:expr; if $b:expr; $(if $c:expr;)* for $($rest:tt)*) =>
-        (iterate_helper![if $a && $b $(&& $c)*; for $($rest)*]);
+        (iterate![if $a && $b $(&& $c)*; for $($rest)*]);
     (if $a:expr; if $b:expr; $(if $c:expr;)* let $($rest:tt)*) =>
-        (iterate_helper![if $a && $b $(&& $c)*; let $($rest)*]);
+        (iterate![if $a && $b $(&& $c)*; let $($rest)*]);
     (if $a:expr; if $b:expr; $(if $c:expr;)* yield $($rest:tt)*) =>
-        (iterate_helper![if $a && $b $(&& $c)*; yield $($rest)*]);
+        (iterate![if $a && $b $(&& $c)*; yield $($rest)*]);
     // if
     (if $a:expr; for $($rest:tt)*) =>
-        (FlatIter::new((if $a { Some(iterate_helper![for $($rest)*]) } else { None }).into_iter()));
+        ($crate::FlatIter::new(if $a { Some(iterate![for $($rest)*]) } else { None }));
     (if $a:expr; let $($rest:tt)*) =>
-        (FlatIter::new((if $a { Some(iterate_helper![let $($rest)*]) } else { None }).into_iter()));
+        ($crate::FlatIter::new(if $a { Some(iterate![let $($rest)*]) } else { None }));
     (if $a:expr; yield $($rest:tt)*) =>
-        (FlatIter::new((if $a { Some(iterate_helper![yield $($rest)*]) } else { None }).into_iter()));
+        ($crate::FlatIter::new(if $a { Some(iterate![yield $($rest)*]) } else { None }));
     // let
     ($(let $lhs:pat = $rhs:expr;)+ for $($rest:tt)*) =>
-        ({ $(let $lhs = $rhs;)+ iterate_helper![for $($rest)*] });
+        ({ $(let $lhs = $rhs;)+ iterate![for $($rest)*] });
     ($(let $lhs:pat = $rhs:expr;)+ if $($rest:tt)*) =>
-        ({ $(let $lhs = $rhs;)+ iterate_helper![if $($rest)*] });
+        ({ $(let $lhs = $rhs;)+ iterate![if $($rest)*] });
     ($(let $lhs:pat = $rhs:expr;)+ yield $($rest:tt)*) =>
-        ({ $(let $lhs = $rhs;)+ iterate_helper![yield $($rest)*] });
+        ({ $(let $lhs = $rhs;)+ iterate![yield $($rest)*] });
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate test;
+    use std::fmt::Display;
+
+    fn check_match<N: PartialEq + Display, I: Iterator<Item=N>, J: Iterator<Item=N>>(mut i: I, mut j: J) {
+        let mut n = 0usize;
+        loop {
+            match (i.next(), j.next()) {
+                (None, None) => return,
+                (Some(ref x), None) => panic!["Mismatch on item {}: {} vs. None", n, x],
+                (None, Some(ref y)) => panic!["Mismatch on item {}: None vs. {}", n, y],
+                (Some(ref x), Some(ref y)) => if x != y { panic!["Mismatch on item {}: {} vs. {}", n, x, y] },
+            }
+            n += 1;
+        }
+    }
+    
+    #[test]
+    fn test_basic() {
+        check_match(vec![1, 2, 3, 4, 5].into_iter(),
+                    iterate![for i in 1..6; yield i]);
+    }
+
+    #[test]
+    fn test_basic_if() {
+        check_match(vec![0, 2, 4, 6, 8].into_iter(),
+                    iterate![for i in 0..10;
+                             if i % 2 == 0;
+                             yield i]);
+    }
+
+    #[test]
+    fn test_basic_if_let() {
+        check_match(vec![1, 3, 5, 7, 9].into_iter(),
+                    iterate![for i in 0..10;
+                             if i % 2 == 0;
+                             let z = i + 1;
+                             yield z]);
+    }
+
+    // This fails to compile because the closures generated by iterate! may
+    // outlive values. (Using values.into_iter() also fails.)
+    // fn test_move_fail() {
+    //     let values = vec![1, 2, 3, 4];
+    //     iterate![for i in 0..10; for v in values.iter(); yield v];
+    // }
+
+    // This provides an example of how to refer to an external variable without
+    // moving everything out of it.
+    #[test]
+    fn test_move_succeed() {
+        let values = vec![1, 2, 3, 4];
+        let vs = &values;
+        check_match(vec![1, 2, 3, 4,
+                         1, 2, 3, 4,
+                         1, 2, 3, 4,
+                         1, 2, 3, 4].into_iter(),
+                    iterate![for i in 0..4;
+                             for v in vs.iter();
+                             yield *v]);
+    }
+
+    // Taking references like that is still prone to lifetime-checking,
+    // however. The below also fails to compile.
+    // fn test_move_fail() {
+    //     let i = {
+    //         let values = vec![1, 2, 3, 4];
+    //         let vs = &values;
+    //         iterate![for i in 0..4; for v in vs.iter(); yield *v]
+    //     };
+    //     for x in i {
+    //         println!("{}", x)
+    //     }
+    // }
+
+    #[test]
+    fn test_nested_refs() {
+        let values = vec![1, 2, 3, 4];
+        let vs = &values;
+        check_match(vec![1, 2, 3, 4,
+                         1, 2, 3, 4,
+                         1, 2, 3, 4,
+                         1, 2, 3, 4].into_iter(),
+                    iterate![for x in vs.iter();
+                             for y in vs.iter();
+                             yield *y]);
+    }
+
+    #[test]
+    fn test_nested_refs_inner_if() {
+        let values = vec![1, 2, 3, 4];
+        let vs = &values;
+        check_match(vec![2, 2, 2, 2].into_iter(),
+                    iterate![for x in vs.iter();
+                             for y in vs.iter();
+                             if *y == 2;
+                             yield *y]);
+    }
+
+    #[test]
+    fn test_nested_refs_outer_let() {
+        let values = vec![1, 2, 3, 4];
+        let vs = &values;
+        check_match(vec![5, 6, 7, 8,
+                         6, 7, 8, 9,
+                         7, 8, 9, 10,
+                         8, 9, 10, 11].into_iter(),
+                    iterate![for x in vs.iter();
+                             let a = *x + 3;
+                             for y in vs.iter();
+                             yield *y + a]);
+    }
+
+    // Variable shadowing is allowed, even when variables differ by type. This
+    // is consistent with ordinary "let".
+    #[test]
+    fn test_nested_refs_let_let_shadowing_1() {
+        let values = vec![1, 2, 3, 4];
+        let vs = &values;
+        check_match(vec![2, 3, 4, 5,
+                         2, 3, 4, 5,
+                         2, 3, 4, 5,
+                         2, 3, 4, 5].into_iter(),
+                    iterate![for x in vs.iter();
+                             let a = *x + 3;
+                             for y in vs.iter();
+                             let a = 1;
+                             yield *y + a]);
+    }
+
+    #[test]
+    fn test_nested_refs_let_let_shadowing_2() {
+        let values = vec![1, 2, 3, 4];
+        let vs = &values;
+        check_match(vec![2, 3, 4, 5,
+                         2, 3, 4, 5,
+                         2, 3, 4, 5,
+                         2, 3, 4, 5].into_iter(),
+                    iterate![for x in vs.iter();
+                             let a = *x + 3;
+                             let a = 1;
+                             for y in vs.iter();
+                             yield *y + a]);
+    }
+
+    // The compiler will warn about unused loop variables.
+    #[test]
+    fn test_nested_refs_for_let_shadowing() {
+        let values = vec![1, 2, 3, 4];
+        let vs = &values;
+        check_match(vec![5, 5, 5, 5,
+                         6, 6, 6, 6,
+                         7, 7, 7, 7,
+                         8, 8, 8, 8].into_iter(),
+                    iterate![for x in vs.iter();
+                             let a = *x + 3;
+                             for y in vs.iter();
+                             let y = 1;
+                             yield y + a]);
+    }
+
+    #[test]
+    fn test_nested_refs_for_let_for_shadowing() {
+        let values = vec![1, 2, 3, 4];
+        let vs = &values;
+        let other_values = vec![5, 6, 7, 8];
+        let ys = &other_values;
+        check_match(vec![5, 6, 7, 8,
+                         5, 6, 7, 8,
+                         5, 6, 7, 8,
+                         5, 6, 7, 8].into_iter(),
+                    iterate![for x in vs.iter();
+                             let x = *x + 1;
+                             for x in ys.iter();
+                             yield *x]);
+    }
 }
