@@ -75,7 +75,7 @@ let items = {
 };
 #+END_SRC
 
-* TODO
+* To-do
  - Examine overhead introduced by nesting closures instead of using naked loops.
  - Benchmark.
  - ?Figure out how to avoid moving values we don't have to.
