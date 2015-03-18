@@ -5,8 +5,7 @@ of nested flat-map operations. If you're familiar with Python's list
 comprehensions or Scala's for statement, the syntax should be familiar.
 
 The macro should be provided with a series of semicolon-separated statements,
-starting with a =for= statement and ending with a =yield= statement. Permitted
-statements:
+ending with a =yield= statement. Permitted statements:
  - =for x in xs= :: Introduces a scope that iterates through =xs= and binds =x=
                     to each element thereof. Successive =for= statements behave
                     like nested loops, so =iterate![for x in xs; for y in ys; yield (x, y)]=
