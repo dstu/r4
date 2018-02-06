@@ -249,4 +249,13 @@ mod tests {
                              for x in ys.iter();
                              yield *x]);
     }
+
+    #[test]
+    fn test_multiple_yields_does_chaining() {
+        check_match(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                    iterate![for x in 0..5;
+                             yield x;
+                             for y in 5..10;
+                             yield y]);
+    }
 }
