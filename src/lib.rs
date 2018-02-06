@@ -35,7 +35,7 @@ impl<I: Iterator> Iterator for FlatIter<I> {
 ///
 /// Multiple `yield` expressions are permitted. If present, they will produce a
 /// chained sequence of iterators. Iterator chaining functions according to the
-/// scope of any immediately preceding `for` statement.
+/// scope of the closest preceding `for` statement.
 ///
 /// For example, `iterate![yield 0; yield 1; yield 2]` produces the sequence `1,
 /// 2, 3`, but `iterate![for x in 0..2; yield x; for y in 2..4; yield y]`
