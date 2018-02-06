@@ -30,14 +30,36 @@ impl<I: Iterator> Iterator for FlatIter<I> {
     }
 }
 
-// Main entrypoint for iteration via for comprehensions. Accepts expressions
-// like:
-//
-// (for x in xs; (if a;|let b = c;)*)+ yield r
-//
-// Expressions are compiled into nested flat_map operations via closures that
-// move out of the enclosing environment. See package-level documentation for
-// details.
+/// Main entrypoint for iteration via for comprehensions. Produces an iterator
+/// over values `yield`ed in a sequence of semicolon-separated expressions.
+///
+/// Multiple `yield` expressions are permitted. If present, they will produce a
+/// chained sequence of iterators. Iterator chaining functions according to the
+/// scope of any immediately preceding `for` statement.
+///
+/// For example, `iterate![yield 0; yield 1; yield 2]` produces the sequence `1,
+/// 2, 3`, but `iterate![for x in 0..2; yield x; for y in 2..4; yield y]`
+/// produces the sequence `0, 2, 3, 1, 2, 3`, as if you had written:
+///
+/// ```rust,ignore
+/// for x in 0..2 {
+///   yield x;
+///   for y in 2..4 {
+///     yield y;
+///   }
+/// }
+/// ```
+///
+/// Expressions are:
+///
+/// * `for x in xs`: introduces a new scope that iterates over `xs`, binding `x`
+/// to each of its values.
+/// * `if cond`: short-circuits subsequent expressions if `cond` is not `true`.
+/// * `let a = b`: introduces a new scope that binds `a` to `b`.
+/// * `yield r`: emits the value of the expression `r`.
+///
+/// Expressions are compiled into nested flat_map operations via closures that
+/// move out of the enclosing environment. See the package README for details.
 #[macro_export]
 macro_rules! iterate {
     // Implementation note: adjacent wildcard matches aren't allowed, so each
