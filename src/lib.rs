@@ -46,6 +46,15 @@ macro_rules! iterate {
 
     // yield
     (yield $r:expr) => (Some($r).into_iter());
+    // chained yield
+    (yield $r:expr; for $($rest:tt)+) =>
+        (iterate![yield $r].chain(iterate![for $($rest)+]));
+    (yield $r:expr; if $($rest:tt)+) =>
+        (iterate![yield $r].chain(iterate![if $($rest)+]));
+    (yield $r:expr; let $($rest:tt)+) =>
+        (iterate![yield $r].chain(iterate![let $($rest)+]));
+    (yield $r:expr; yield $($rest:tt)+) =>
+        (iterate![yield $r].chain(iterate![yield $($rest)+]));
     // for
     (for $x:ident in $xs:expr; $($rest:tt)*) =>
         ($xs.flat_map(move |$x| { iterate![$($rest)*] }));
@@ -251,11 +260,52 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_yields_does_chaining() {
-        check_match(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    fn test_just_multiple_yields() {
+        check_match(vec![0, 1, 2, 3, 4, 5].into_iter(),
+                    iterate![yield 0;
+                             yield 1;
+                             yield 2;
+                             yield 3;
+                             yield 4;
+                             yield 5]);
+    }
+
+    #[test]
+    fn test_multiple_yields_liked_nested_loops() {
+        check_match(vec![0, 5, 6, 7, 8, 9,
+                         1, 5, 6, 7, 8, 9,
+                         2, 5, 6, 7, 8, 9,
+                         3, 5, 6, 7, 8, 9,
+                         4, 5, 6, 7, 8, 9].into_iter(),
                     iterate![for x in 0..5;
                              yield x;
                              for y in 5..10;
                              yield y]);
+    }
+
+    #[test]
+    fn test_multiple_yield_with_filter_1() {
+      check_match(vec![0, 5, 6, 7, 8, 9,
+                       1,
+                       2, 5, 6, 7, 8, 9,
+                       3,
+                       4, 5, 6, 7, 8, 9].into_iter(),
+                  iterate![for x in 0..5;
+                           yield x;
+                           if x % 2 == 0;
+                           for y in 5..10;
+                           yield y]);
+    }
+
+    #[test]
+    fn test_multiple_yield_with_filter_2() {
+      check_match(vec![0, 5, 6, 7, 8, 9,
+                       2, 5, 6, 7, 8, 9,
+                       4, 5, 6, 7, 8, 9].into_iter(),
+                  iterate![for x in 0..5;
+                           if x % 2 == 0;
+                           yield x;
+                           for y in 5..10;
+                           yield y]);
     }
 }
