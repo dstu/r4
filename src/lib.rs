@@ -30,14 +30,36 @@ impl<I: Iterator> Iterator for FlatIter<I> {
     }
 }
 
-// Main entrypoint for iteration via for comprehensions. Accepts expressions
-// like:
-//
-// (for x in xs; (if a;|let b = c;)*)+ yield r
-//
-// Expressions are compiled into nested flat_map operations via closures that
-// move out of the enclosing environment. See package-level documentation for
-// details.
+/// Main entrypoint for iteration via for comprehensions. Produces an iterator
+/// over values `yield`ed in a sequence of semicolon-separated expressions.
+///
+/// Multiple `yield` expressions are permitted. If present, they will produce a
+/// chained sequence of iterators. Iterator chaining functions according to the
+/// scope of the closest preceding `for` statement.
+///
+/// For example, `iterate![yield 0; yield 1; yield 2]` produces the sequence `1,
+/// 2, 3`, but `iterate![for x in 0..2; yield x; for y in 2..4; yield y]`
+/// produces the sequence `0, 2, 3, 1, 2, 3`, as if you had written:
+///
+/// ```rust,ignore
+/// for x in 0..2 {
+///   yield x;
+///   for y in 2..4 {
+///     yield y;
+///   }
+/// }
+/// ```
+///
+/// Expressions are:
+///
+/// * `for x in xs`: introduces a new scope that iterates over `xs`, binding `x`
+/// to each of its values.
+/// * `if cond`: short-circuits subsequent expressions if `cond` is not `true`.
+/// * `let a = b`: introduces a new scope that binds `a` to `b`.
+/// * `yield r`: emits the value of the expression `r`.
+///
+/// Expressions are compiled into nested flat_map operations via closures that
+/// move out of the enclosing environment. See the package README for details.
 #[macro_export]
 macro_rules! iterate {
     // Implementation note: adjacent wildcard matches aren't allowed, so each
@@ -46,6 +68,15 @@ macro_rules! iterate {
 
     // yield
     (yield $r:expr) => (Some($r).into_iter());
+    // chained yield
+    (yield $r:expr; for $($rest:tt)+) =>
+        (iterate![yield $r].chain(iterate![for $($rest)+]));
+    (yield $r:expr; if $($rest:tt)+) =>
+        (iterate![yield $r].chain(iterate![if $($rest)+]));
+    (yield $r:expr; let $($rest:tt)+) =>
+        (iterate![yield $r].chain(iterate![let $($rest)+]));
+    (yield $r:expr; yield $($rest:tt)+) =>
+        (iterate![yield $r].chain(iterate![yield $($rest)+]));
     // for
     (for $x:ident in $xs:expr; $($rest:tt)*) =>
         ($xs.flat_map(move |$x| { iterate![$($rest)*] }));
@@ -248,5 +279,55 @@ mod tests {
                              let x = *x + 1;
                              for x in ys.iter();
                              yield *x]);
+    }
+
+    #[test]
+    fn test_just_multiple_yields() {
+        check_match(vec![0, 1, 2, 3, 4, 5].into_iter(),
+                    iterate![yield 0;
+                             yield 1;
+                             yield 2;
+                             yield 3;
+                             yield 4;
+                             yield 5]);
+    }
+
+    #[test]
+    fn test_multiple_yields_liked_nested_loops() {
+        check_match(vec![0, 5, 6, 7, 8, 9,
+                         1, 5, 6, 7, 8, 9,
+                         2, 5, 6, 7, 8, 9,
+                         3, 5, 6, 7, 8, 9,
+                         4, 5, 6, 7, 8, 9].into_iter(),
+                    iterate![for x in 0..5;
+                             yield x;
+                             for y in 5..10;
+                             yield y]);
+    }
+
+    #[test]
+    fn test_multiple_yield_with_filter_1() {
+      check_match(vec![0, 5, 6, 7, 8, 9,
+                       1,
+                       2, 5, 6, 7, 8, 9,
+                       3,
+                       4, 5, 6, 7, 8, 9].into_iter(),
+                  iterate![for x in 0..5;
+                           yield x;
+                           if x % 2 == 0;
+                           for y in 5..10;
+                           yield y]);
+    }
+
+    #[test]
+    fn test_multiple_yield_with_filter_2() {
+      check_match(vec![0, 5, 6, 7, 8, 9,
+                       2, 5, 6, 7, 8, 9,
+                       4, 5, 6, 7, 8, 9].into_iter(),
+                  iterate![for x in 0..5;
+                           if x % 2 == 0;
+                           yield x;
+                           for y in 5..10;
+                           yield y]);
     }
 }
