@@ -80,7 +80,7 @@ macro_rules! iterate {
     (yield $r:expr; yield $($rest:tt)+) =>
         (iterate![yield $r].chain(iterate![yield $($rest)+]));
     // for
-    (for $x:ident in $xs:expr; $($rest:tt)*) =>
+    (for $x:pat in $xs:expr; $($rest:tt)*) =>
         ($xs.flat_map(move |$x| { iterate![$($rest)*] }));
     // if let
     (if let $x:pat = $e:expr; for $($rest:tt)*) =>
@@ -389,5 +389,17 @@ mod tests {
                              if let Some(b) = Some(x);
                              for y in (b + 1)..(b + 4);
                              yield y]);
+    }
+
+    #[test]
+    fn bind_pattern_in_for() {
+        struct Item {
+            x: u32,
+            y: u32,
+        };
+        let items = (0..5).map(|x| Item { x: x, y: x * 2, });
+        check_match(vec![0, 0, 1, 2, 2, 4, 3, 6, 4, 8].into_iter(),
+                    iterate![for Item { x, y, } in items;
+                             yield x; yield y]);
     }
 }
