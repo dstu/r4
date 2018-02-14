@@ -4,8 +4,8 @@ This package provides the `iterate!` macro, which builds for comprehensions out
 of nested flat-map operations. If you're familiar with Python's list
 comprehensions or Scala's for statement, the syntax should be familiar.
 
-See rustdocs for usage, examples, and a more detailed description of the macro's
-internals.
+See [rustdocs](https://docs.rs/r4) for usage, examples, and a more detailed
+description of the macro's internals.
 
 # To-do
  - Examine overhead introduced by nesting closures instead of using naked loops.

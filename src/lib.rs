@@ -84,6 +84,7 @@
 //! # fn main() {
 //! let v: Vec<i32> = iterate![for x in 0..10; if x % 2 == 0; yield x].collect();
 //! assert_eq!(v, vec![0, 2, 4, 6, 8]);
+//! # }
 //! ```
 //!
 //! A pattern-based guard may be employed via `if let`.
@@ -333,6 +334,8 @@ macro_rules! iterate {
         ($crate::FlatIter::new(if $a { Some(iterate![for $($rest)*]) } else { None }));
     (if $a:expr; let $($rest:tt)*) =>
         ($crate::FlatIter::new(if $a { Some(iterate![let $($rest)*]) } else { None }));
+    (if $a:expr; if let $($rest:tt)*) =>
+        ($crate::FlatIter::new(if $a { Some(iterate![if let $($rest)*]) } else { None }));
     (if $a:expr; yield $($rest:tt)*) =>
         ($crate::FlatIter::new(if $a { Some(iterate![yield $($rest)*]) } else { None }));
     // let
@@ -631,5 +634,15 @@ mod tests {
         check_match(vec![0, 0, 1, 2, 2, 4, 3, 6, 4, 8].into_iter(),
                     iterate![for Item { x, y, } in items;
                              yield x; yield y]);
+    }
+
+    #[test]
+    fn if_if_let() {
+        check_match(vec![0, 1, 2, 3].into_iter(),
+                    iterate![for x in 0..4;
+                             let y = Some(x);
+                             if x < 4;
+                             if let Some(z) = y;
+                             yield z]);
     }
 }
