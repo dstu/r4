@@ -1,3 +1,4 @@
+// -*- mode: rust; rust-indent-offset: 4; -*-
 use std::iter::Iterator;
 
 // Flat-maps an Option<I> where I: Iterator into any underlying Iterator.
