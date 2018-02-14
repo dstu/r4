@@ -399,7 +399,7 @@ mod tests {
         };
         let items = (0..5).map(|x| Item { x: x, y: x * 2, });
         check_match(vec![0, 0, 1, 2, 2, 4, 3, 6, 4, 8].into_iter(),
-                    iterate![for Item { x, y} in items;
+                    iterate![for Item { x, y, } in items;
                              yield x; yield y]);
     }
 }
