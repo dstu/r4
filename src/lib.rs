@@ -69,7 +69,7 @@ macro_rules! iterate {
     // separated by macro keywords.
 
     // yield
-    (yield $r:expr) => (Some($r).into_iter());
+    (yield $r:expr) => (::std::iter::once($r));
     // chained yield
     (yield $r:expr; for $($rest:tt)+) =>
         (iterate![yield $r].chain(iterate![for $($rest)+]));
