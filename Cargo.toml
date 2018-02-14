@@ -1,4 +1,10 @@
 [package]
 name = "r4"
-version = "1.0.0-b1"
+version = "1.0.0"
 authors = [ "Stu Black <trurl@freeshell.org>" ]
+description = "A compact macro that generates iterators using for comprehensions and natural Rust syntax."
+documentation = "https://docs.rs/r4/1.0.0"
+repository = "https://github.com/dstu/r4"
+keywords = ["comprehensions", "list", "iterator", "iterate", "python", "scala", "macro"]
+license = "Apache-2.0"
+maintenance = { status = "passively-maintained" }
