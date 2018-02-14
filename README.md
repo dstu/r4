@@ -9,11 +9,13 @@ ending with a `yield` statement. Permitted statements:
 * `for x in xs`: Introduces a scope that iterates through `xs` and binds `x` to
   each element thereof. Successive `for` statements behave like nested loops, so
   `iterate![for x in xs; for y in ys; yield (x, y)]` will consist of `xs.len() *
-  ys.len()` elements.
+  ys.len()` elements. Note that `x` may be a pattern.
 * `let x = y`: Binds `x` (which may be a pattern, like `Some(foo)`) to the
   expression `y`.
 * `if a`: Skips over any later statements and doesn't yield anything iff the
   boolean expression `a` isn't `true`.
+* `if let a = b`: Binds the pattern `a` to the expression `b`, skipping over
+  later statements and not yielding anything if the pattern doesn't match.
 * `yield x`: Yields the given expression for an iteration.
 
 The closures created by `iterate!` move values out of the surrounding
@@ -81,7 +83,7 @@ let items = {
 
 # Copyright
 
-Copyright 2015, Donald S. Black.
+Copyright 2015-2018, Donald S. Black.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 this file except in compliance with the License.  You may obtain a copy of the
