@@ -105,7 +105,6 @@ macro_rules! iterate {
 
 #[cfg(test)]
 mod tests {
-    extern crate test;
     use std::fmt::Display;
 
     fn check_match<N: PartialEq + Display, I: Iterator<Item=N>, J: Iterator<Item=N>>(mut i: I, mut j: J) {
