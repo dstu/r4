@@ -1,4 +1,3 @@
-#![feature(test)]
 use std::iter::Iterator;
 
 // Flat-maps an Option<I> where I: Iterator into any underlying Iterator.
