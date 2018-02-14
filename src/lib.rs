@@ -55,7 +55,9 @@ impl<I: Iterator> Iterator for FlatIter<I> {
 /// * `for x in xs`: introduces a new scope that iterates over `xs`, binding `x`
 /// to each of its values.
 /// * `if cond`: short-circuits subsequent expressions if `cond` is not `true`.
-/// * `let a = b`: introduces a new scope that binds `a` to `b`.
+/// * `if let pattern = expr`: introduces a new scope that binds `pattern` to `expr`,
+///   short-circuiting subsequent expressions if `pattern` does not match `expr`.
+/// * `let a = b`: introduces a new scope that binds `a` (which may be a pattern) to `b`.
 /// * `yield r`: emits the value of the expression `r`.
 ///
 /// Expressions are compiled into nested flat_map operations via closures that
@@ -80,6 +82,15 @@ macro_rules! iterate {
     // for
     (for $x:ident in $xs:expr; $($rest:tt)*) =>
         ($xs.flat_map(move |$x| { iterate![$($rest)*] }));
+    // if let
+    (if let $x:pat = $e:expr; for $($rest:tt)*) =>
+        ($crate::FlatIter::new(if let $x = $e { Some(iterate![for $($rest)*]) } else { None }));
+    (if let $x:pat = $e:expr; if $($rest:tt)*) =>
+        ($crate::FlatIter::new(if let $x = $e { Some(iterate![if $($rest)*]) } else { None }));
+    (if let $x:pat = $e:expr; let $($rest:tt)*) =>
+        ($crate::FlatIter::new(if let $x = $e { Some(iterate![let $($rest)*]) } else { None }));
+    (if let $x:pat = $e:expr; yield $($rest:tt)*) =>
+        ($crate::FlatIter::new(if let $x = $e { Some(iterate![yield $($rest)*]) } else { None }));
     // if if => if
     (if $a:expr; if $b:expr; $(if $c:expr;)* for $($rest:tt)*) =>
         (iterate![if $a && $b $(&& $c)*; for $($rest)*]);
@@ -328,5 +339,55 @@ mod tests {
                            yield x;
                            for y in 5..10;
                            yield y]);
+    }
+
+    #[test]
+    fn test_simple_if_let() {
+        check_match(vec![0, 1, 2, 3].into_iter(),
+                    iterate![for x in 0..4;
+                             if let Some(b) = Some(x);
+                             yield b]);
+    }
+
+    #[test]
+    fn test_if_let_filter() {
+        check_match(vec![].into_iter(),
+                    iterate![for x in 0..4;
+                             let c = if x > 5 { Some(x) } else { None };
+                             if let Some(b) = c;
+                             yield b]);
+    }
+
+    #[test]
+    fn test_if_let_if() {
+        check_match(vec![0, 2].into_iter(),
+                    iterate![for x in 0..4;
+                             if let Some(b) = Some(x);
+                             if b % 2 == 0;
+                             yield b]);
+    }
+
+    #[test]
+    fn test_if_let_let() {
+        check_match(vec![0, 2, 4, 6].into_iter(),
+                    iterate![for x in 0..4;
+                             if let Some(b) = Some(x);
+                             let c = b * 2;
+                             yield c]);
+    }
+
+    #[test]
+    fn test_if_let_for() {
+        check_match(vec![0,
+                         1, 2, 3,
+                         1,
+                         2, 3, 4,
+                         2,
+                         3, 4, 5].into_iter(),
+                    iterate![for x in 0..3;
+                             yield x;
+                             if let Some(b) = Some(x);
+                             for y in (b + 1)..(b + 4);
+                             yield y]);
     }
 }
